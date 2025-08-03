@@ -1,5 +1,5 @@
 CC ?= gcc
-CFLAGS ?= -Wall -Wextra -Werror -pedantic -O2 `pkg-config --libs lmdb`
+CFLAGS ?= -Wall -Wextra -Werror -pedantic -O2 -llmdb
 
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
