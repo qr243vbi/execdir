@@ -7,68 +7,21 @@
 #include <pwd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <lmdb.h>
 
-#define USAGE "Usage: execdir [-h] [-v] [-s] [-a NAME PATH] [-r NAME] [-l] " \
+
+#define USAGE "Usage: execdir [-h] [-v] [-s] [-a] [-a] [-p] [-n NAME PATH] [-r NAME] [-g NAME] [-l] " \
 "[ARGS...]"
 
 #define VERSION "0.4.0"
 
-#define EXECDIR_FILE ".execdir"
+#define EXECDIR_FILE ".execdir.db"
 
 #define print_error(...) fprintf(stderr, "execdir: " __VA_ARGS__);
 
-int create_directory(const char *path) {
-    char *absolute_path = realpath(path, NULL);
-    if (absolute_path == NULL) {
-        print_error("realpath failed");
-        return -1; // Error resolving the path
-    }
-
-    struct stat st;
-
-    // Iterate through each character in the absolute path
-    for (char *p = absolute_path + 1; *p; ++p) {
-        if (*p == '/') {
-            *p = '\0'; // Temporarily terminate the string
-
-            // Check if the directory exists
-            if (stat(absolute_path, &st) != 0) {
-                // Create the directory if it does not exist
-                if (mkdir(absolute_path, 0755) == -1) {
-                    print_error("mkdir failed");
-                    free(absolute_path); // Clean up
-                    return -1; // Error creating directory
-                }
-            }
-
-            *p = '/'; // Restore the '/' character
-        }
-    }
-
-    // Create the final target directory
-    if (stat(absolute_path, &st) != 0) {
-        if (mkdir(absolute_path, 0755) == -1) {
-            print_error("mkdir failed");
-            free(absolute_path); // Clean up
-            return -1; // Error creating directory
-        }
-    }
-
-    free(absolute_path); // Clean up
-    return 0; // Directory created successfully
-}
-
-
-// name:path record linked list
-struct list {
-    char *name;
-    char *path;
-
-    struct list *next;
-};
 
 // strdup wrapper
-char *xstrdup(char *s) {
+char *xstrdup(const char *s) {
     char *str;
 
     str = strdup(s);
@@ -80,80 +33,37 @@ char *xstrdup(char *s) {
     return str;
 }
 
-// add a new name:path record on to the start of the list
-struct list *list_prepend(struct list *list, char *name, char *path) {
-    struct list *new_list;
-
-    new_list = malloc(sizeof(struct list));
-    if(!new_list) {
-        print_error("cannot allocate memory: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
+int create_directory(const char *path) {
+    char *temp;
+    char *p = NULL;
+    // Copy the path to a temporary string
+    temp = xstrdup(path);
+    // Iterate through the path and create directories
+    for (p = temp; *p; p++) {
+        if (*p == '/') {
+            if (p != temp){
+                *p = '\0'; // Temporarily terminate the string
+                if (mkdir(temp, 0755) == -1) {
+                    if (errno != EEXIST) {
+                        perror("mkdir failed");
+                        return -1;
+                    }
+                }
+                *p = '/'; // Restore the string
+            }
+        }
     }
 
-    new_list->name = xstrdup(name);
-    new_list->path = xstrdup(path);
-    new_list->next = list;
-
-    return new_list;
-}
-
-// return a path found by name in the list
-char *list_get_path_by_name(struct list *list, char *name) {
-    for(struct list *dir = list; dir; dir = dir->next) {
-        if(!strcmp(name, dir->name))
-            return dir->path;
+    // Create the final directory
+    if (mkdir(temp, 0755) == -1) {
+        if (errno != EEXIST) {
+            perror("mkdir failed");
+            return -1;
+        }
     }
-
-    return NULL;
+    return 0; // Success
 }
 
-// remove a name:path record from the list
-struct list *list_remove(struct list *list, char *name, int *found) {
-    struct list **prev_list = &list;
-    struct list *current_list = NULL;
-    *found = 0;
-
-    while(*prev_list) {
-        current_list = *prev_list;
-
-        if(!strcmp(name, current_list->name)) {
-            *prev_list = current_list->next;
-            free(current_list->name);
-            free(current_list->path);
-            free(current_list);
-            *found = 1;
-            break;
-        } else
-            prev_list = &current_list->next;
-    }
-
-    return list;
-}
-
-// reverse the list
-struct list *list_reverse(struct list *list) {
-    struct list *prev_list = NULL;
-    struct list *next_list;
-
-    while(list) {
-        next_list = list->next;
-        list->next = prev_list;
-        prev_list = list;
-        list = next_list;
-    }
-
-    return prev_list;
-}
-
-// free all the memory used by the list
-void list_free(struct list *list) {
-    for(struct list *next_list; list; list = next_list) {
-        next_list = list->next;
-        free(list->name);
-        free(list->path);
-        free(list);
-    }
-}
 
 // get the current user's home directory
 char *get_home_dir() {
@@ -198,74 +108,6 @@ char *get_execdir_file_path() {
     sprintf(path, "%s/" EXECDIR_FILE, home_dir);
 
     return path;
-}
-
-// parse execdir file and return a list of name:path records
-struct list *get_list_from_file(char *filename) {
-    struct list *list = NULL;
-    FILE *file;
-    char *line = NULL;
-    size_t len;
-
-    file = fopen(filename, "r");
-    if(!file) {
-        // return NULL when the file doesn't exist
-        if(errno == ENOENT)
-            return NULL;
-
-        print_error("cannot open \"%s\" file: %s\n", filename, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    while(getline(&line, &len, file) != -1) {
-        char *name = line;
-        char *path;
-        int before_newline;
-
-        path = strchr(line, ':');
-
-        // delimiter missing
-        if(!path)
-            continue;
-
-        // end the name string before the delimiter and skip the delimiter
-        *path++ = '\0';
-
-        // end the path string before the trailing newline
-        before_newline = strcspn(path, "\n");
-        path[before_newline] = '\0';
-
-        // name or path missing
-        if(!(*name && *path))
-            continue;
-
-        list = list_prepend(list, name, path);
-    }
-
-    free(line);
-    fclose(file);
-
-    // reverse the list to match the order in the file
-    list = list_reverse(list);
-
-    return list;
-}
-
-// save a list to the execdir file
-void save_list_to_file(char *filename, struct list *list) {
-    FILE *file;
-
-    file = fopen(filename, "w");
-    if(!file) {
-        print_error("cannot open \"%s\" file: %s\n", filename, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    for(struct list *dir = list; dir; dir = dir->next) {
-        fprintf(file, "%s:%s\n", dir->name, dir->path);
-    }
-
-    fclose(file);
 }
 
 // getcwd wrapper
@@ -361,21 +203,192 @@ void help_message() {
            "  -n NAME PATH  add an alias for a path\n"
            "  -r NAME       remove an alias\n"
            "  -a            use aliases (-aa for using only aliases)\n"
+           "  -g NAME       get alias variable\n"
            "  -p            create directory if absent\n"
            "  -l            list all aliases\n\n"
            "Report bugs to <https://github.com/qr243vbi/execdir/issues>\n");
     exit(EXIT_SUCCESS);
 }
 
+typedef struct {
+    MDB_env *env;
+    MDB_txn *txn;
+    MDB_dbi dbi;
+} LMDB_Database;
+
+void handle_error(int rc) {
+    if (rc != 0) {
+        fprintf(stderr, "Error: %s\n", mdb_strerror(rc));
+        exit(EXIT_FAILURE);
+    }
+    return;
+}
+
+LMDB_Database* open_or_create_lmdb_database(const char *path, int flags) {
+    create_directory(path);
+    LMDB_Database *db = malloc(sizeof(LMDB_Database));
+    if (db == NULL) {
+        fprintf(stderr, "Memory allocation failure\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // Create the LMDB environment
+    int rc = mdb_env_create(&db->env);
+    handle_error(rc);
+
+    // Set the map size (10 MB in this example)
+    rc = mdb_env_set_mapsize(db->env, 10485760);
+    handle_error(rc);
+
+    // Open the environment
+    rc = mdb_env_open(db->env, path, 0, 0664);
+    handle_error(rc);
+
+    // Start a read-write transaction
+    rc = mdb_txn_begin(db->env, NULL, flags, &db->txn);
+    handle_error(rc);
+
+    // Try to open the database
+    rc = mdb_open(db->txn, NULL, 0, &db->dbi);
+
+    // If the database does not exist, create it
+    if (rc == MDB_NOTFOUND) {
+        rc = mdb_open(db->txn, NULL, MDB_CREATE, &db->dbi);
+        handle_error(rc);
+    } else {
+        handle_error(rc); // Handle other possible errors
+    }
+
+    return db;
+}
+
+void close_lmdb_database(LMDB_Database *db) {
+    if (db->txn) {
+        mdb_txn_commit(db->txn);
+    }
+    mdb_close(db->env, db->dbi);
+    mdb_env_close(db->env);
+    free(db);
+    return;
+}
+
+char* get_string_value(LMDB_Database *db, const char *key_str) {
+    MDB_val key, data;
+    key.mv_size = strlen(key_str) + 1; // Include null terminator
+    key.mv_data = (void*)key_str;
+
+    // Retrieve the value
+    int rc = mdb_get(db->txn, db->dbi, &key, &data);
+
+    if (rc == 0) {
+        // Value found, allocate space for the string and copy it
+        char *value = malloc(data.mv_size);
+        if (value == NULL) {
+            fprintf(stderr, "Memory allocation failure\n");
+            exit(EXIT_FAILURE);
+        }
+        memcpy(value, data.mv_data, data.mv_size);
+        value[data.mv_size - 1] = '\0'; // Ensure null-termination
+        return value; // Return the value
+    } else if (rc == MDB_NOTFOUND) {
+        return NULL; // Key not found
+    } else {
+        mdb_txn_commit(db->txn); // Commit the transaction
+        handle_error(rc); // Handle other possible errors
+    }
+
+    return NULL; // Should never reach here
+}
+
+void put_string_value(LMDB_Database *db, const char *key_str, const char *value_str) {
+    MDB_val key, data;
+
+    // Prepare key and value
+    key.mv_size = strlen(key_str) + 1; // Include null terminator
+    key.mv_data = (void*)key_str;
+
+    data.mv_size = strlen(value_str) + 1; // Include null terminator
+    data.mv_data = (void*)value_str;
+
+    // Store the key-value pair
+    int rc = mdb_put(db->txn, db->dbi, &key, &data, 0);
+
+    handle_error(rc);
+    return;
+}
+
+
+void drop_string_value(LMDB_Database *db, const char *key_str) {
+    MDB_val key;
+
+    // Prepare key and value
+    key.mv_size = strlen(key_str) + 1; // Include null terminator
+    key.mv_data = (void*)key_str;
+
+    // Store the key-value pair
+    int rc = mdb_del(db->txn, db->dbi, &key, NULL);
+
+    handle_error(rc);
+    return;
+}
+
+char * get_path_by_name(const char * execdir, const char * name){
+    LMDB_Database * db = open_or_create_lmdb_database(execdir, MDB_RDONLY);
+    char * value = get_string_value(db, name);
+    close_lmdb_database(db);
+    return value;
+}
+
+void drop_path_by_name(const char * execdir, const char * name){
+    LMDB_Database * db = open_or_create_lmdb_database(execdir, 0);
+    drop_string_value(db, name);
+    close_lmdb_database(db);
+    return;
+}
+
+void add_alias_to_db(const char * execdir, const char * name, const char * value){
+    LMDB_Database * db = open_or_create_lmdb_database(execdir, 0);
+    put_string_value(db, name, value);
+    close_lmdb_database(db);
+    return;
+}
+
+void list_keys_and_values_db(LMDB_Database *db) {
+    MDB_cursor *cursor;
+    MDB_val key, value;
+
+    // Open a cursor
+    int rc = mdb_cursor_open(db->txn, db->dbi, &cursor);
+    handle_error(rc);
+
+    // Iterate through the key-value pairs
+    while (mdb_cursor_get(cursor, &key, &value, MDB_NEXT) == 0) {
+        printf("%.*s:%.*s\n",
+               (int)key.mv_size - 1, (char *)key.mv_data,
+               (int)value.mv_size - 1, (char *)value.mv_data);
+    }
+
+    // Close the cursor
+    mdb_cursor_close(cursor);
+    return;
+}
+
+void list_keys_and_values(const char * execdir){
+    LMDB_Database * db = open_or_create_lmdb_database(execdir, MDB_RDONLY);
+    list_keys_and_values_db(db);
+    close_lmdb_database(db);
+    return;
+}
+
 int main(int argc, char **argv) {
     int opt;
     char *execdir_file_path = 0;
-    struct list *list = NULL;
     char *cwd;
     char *path;
     struct stat st;
     int help_opt = 0;
     int version_opt = 0;
+    int get_alias_opt = 0;
     int sh_exec_opt = 0;
     int add_alias_opt = 0;
     int rm_alias_opt = 0;
@@ -383,8 +396,11 @@ int main(int argc, char **argv) {
     int use_alias_opt = 0;
     int mkdir_opt = 0;
 
-    while((opt = getopt(argc, argv, "hvsarlpn")) != -1) {
+    while((opt = getopt(argc, argv, "hvsarlpng")) != -1) {
         switch(opt) {
+            case 'g':
+                get_alias_opt = 1;
+                break;
             case 'h':
                 help_opt = 1;
                 break;
@@ -427,54 +443,44 @@ int main(int argc, char **argv) {
 
     // load aliases
     execdir_file_path = get_execdir_file_path();
-    list = get_list_from_file(execdir_file_path);
 
     if(add_alias_opt) {
-        if(argc != 2) {
+        if(argc < 2) {
             print_error("-a requires two arguments\n");
             exit(EXIT_FAILURE);
         }
-
-        list = list_prepend(list, argv[0], argv[1]);
-        list = list_reverse(list);
-
-        save_list_to_file(execdir_file_path, list);
+        add_alias_to_db(execdir_file_path, argv[0], argv[1]);
+        goto do_not_skip_success;
     } else if(rm_alias_opt) {
-        int found;
-
-        if(argc != 1) {
+        if(argc < 1) {
             print_error("-r requires one argument\n");
             exit(EXIT_FAILURE);
         }
-
-        list = list_remove(list, argv[0], &found);
-        if(!found) {
-            print_error("\"%s\" alias not found\n", argv[0]);
+        drop_path_by_name(execdir_file_path, argv[0]);
+        goto do_not_skip_success;
+    } else if(get_alias_opt) {
+        if (argc < 1){
+            print_error("-r requires one argument\n");
             exit(EXIT_FAILURE);
         }
-
-        save_list_to_file(execdir_file_path, list);
-    } else if(ls_alias_opt) {
-        size_t max_name_len = 0;
-
-        // get the longest alias name length
-        for(struct list *dir = list; dir; dir = dir->next) {
-            size_t len = strlen(dir->name);
-            if(len > max_name_len)
-                max_name_len = len;
+        char* value = get_path_by_name(execdir_file_path, argv[0]);
+        if (value == NULL){
+            value = "(null)";
         }
-
-        for(struct list *dir = list; dir; dir = dir->next) {
-            int count = 4 + max_name_len - strlen(dir->name);
-            printf("%s%*s%s\n", dir->name, count, "", dir->path);
-        }
+        printf("%s\n", value);
+        goto do_not_skip_success;
+    } else if (ls_alias_opt) {
+        list_keys_and_values(execdir_file_path);
+        goto do_not_skip_success;
     }
 
-    if(add_alias_opt || rm_alias_opt || ls_alias_opt) {
+    goto skip_success;
+    do_not_skip_success:
+    {
         free(execdir_file_path);
-        list_free(list);
         exit(EXIT_SUCCESS);
     }
+    skip_success:
 
     if(argc < 2) {
         usage_message();
@@ -496,7 +502,7 @@ int main(int argc, char **argv) {
         alias_stat_exec_2:
         char *name = path;
 
-        path = list_get_path_by_name(list, name);
+        path = get_path_by_name(execdir_file_path, name);
         if(!path) {
             if (use_alias_opt == 1) {
                 print_error("path or ");
@@ -521,7 +527,7 @@ int main(int argc, char **argv) {
     }
 
     if(chdir(path) == -1) {
-        print_error("cannot change directory: %s\n", strerror(errno));
+        print_error("cannot change \"%s\" directory: %s\n", path, strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -531,7 +537,6 @@ int main(int argc, char **argv) {
 
     free(cwd);
     free(execdir_file_path);
-    list_free(list);
 
     exit(sh_exec_opt ? sh_exec_cmd(argc, argv) : exec_cmd(argv));
 }

@@ -26,13 +26,13 @@ $ execdir -s ~/Desktop echo \$PWD
 Create an alias for a path:
 
 ```text
-$ execdir -a nq ~/Fedora/SCM/nq
+$ execdir -n nq ~/Fedora/SCM/nq
 ```
 
 Use an alias:
 
 ```text
-$ execdir nq pwd
+$ execdir -aa nq pwd
 /home/xfgusta/Fedora/SCM/nq
 ```
 
@@ -50,25 +50,6 @@ $ execdir -r nq
 ```
 
 ## Installation
-
-### Arch Linux
-
-[**execdir**](https://aur.archlinux.org/packages/execdir) package from AUR
-
-```text
-git clone https://aur.archlinux.org/execdir.git
-cd execdir
-makepkg -si
-```
-
-### Fedora Linux
-
-[**execdir**](https://copr.fedorainfracloud.org/coprs/xfgusta/execdir/) package from Copr
-
-```text
-dnf copr enable xfgusta/execdir
-dnf install execdir
-```
 
 ### From source
 

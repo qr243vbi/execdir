@@ -4,7 +4,7 @@
 execdir \- execute a command in a specific directory 
 
 .SH SYNOPSIS
-\fBexecdir\fR [\fB-h\fR] [\fB-v\fR] [\fB-s\fR] [\fB-a\fR \fINAME\fR \fIPATH\fR] [\fB-r\fR \fINAME\fR] [\fB-l\fR] [\fIARGS\fR...]
+\fBexecdir\fR [\fB-h\fR] [\fB-v\fR] [\fB-p\fR] [\fB-a\fR]  [\fB-s\fR] [\fB-n\fR \fINAME\fR \fIPATH\fR] [\fB-g\fR \fINAME\fR] [\fB-r\fR \fINAME\fR] [\fB-l\fR] [\fIARGS\fR...]
 
 .SH DESCRIPTION
 \fBexecdir\fR is a tool that lets you run a command in a specific directory. It supports shell commands and path aliases. \fBexecdir\fR will try to get an alias if path doesn't exist.
@@ -22,26 +22,35 @@ Display the version number of execdir and exit
 .IP "\fB-s\fR"
 Execute the command as a shell command
 
-.IP "\fB-a\fR \fINAME\fR \fIPATH\fR"
+.IP "\fB-n\fR \fINAME\fR \fIPATH\fR"
 Create an alias for a path
 
 .IP "\fB-r\fR \fINAME\fR"
 Delete an alias
 
+.IP "\fB-g\fR \fINAME\fR"
+Get an alias
+
 .IP "\fB-l\fR"
 List all aliases
 
+.IP "\fB-a\fR"
+Use alias
+
+.IP "\fB-p\fR"
+Create new directories
+
 .SH EXECDIR FILE
 
-All aliases are defined in the \fB~/.execdir\fR file. Each line contains an alias name and a path delimited by a colon:
-
-    name:path
+All aliases are defined in the \fB~/.execdir.db\fR file. This is an Berkeley Database file, on which each key is an alias, and value is an path
 
 .SH AUTHOR
-Gustavo Costa <xfgusta@gmail.com>
+Gustavo Costa <xfgusta@gmail.com> (Original author)
+qr243vbi - new author
 
 .SH BUGS
-Report bugs to <https://github.com/xfgusta/execdir/issues>
+Report bugs to <https://github.com/qr243vbi/execdir/issues>
 
 .SH COPYRIGHT
 Copyright (c) 2022 Gustavo Costa
+Copyright (c) 2025 qr243vbi
