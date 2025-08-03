@@ -7,6 +7,7 @@
 #include <pwd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <limits.h>
 
 #define USAGE "Usage: execdir [-h] [-v] [-s] [-a NAME PATH] [-r NAME] [-l] " \
               "[ARGS...]"
@@ -24,6 +25,49 @@ struct list {
 
     struct list *next;
 };
+
+int create_directory(const char *path) {
+    char *absolute_path = realpath(path, NULL);
+    if (absolute_path == NULL) {
+        perror("realpath failed");
+        return -1; // Error resolving the path
+    }
+
+    struct stat st;
+
+    // Iterate through each character in the absolute path
+    for (char *p = absolute_path + 1; *p; ++p) {
+        if (*p == '/') {
+            *p = '\0'; // Temporarily terminate the string
+
+            // Check if the directory exists
+            if (stat(absolute_path, &st) != 0) {
+                // Create the directory if it does not exist
+                if (mkdir(absolute_path, 0755) == -1) {
+                    perror("mkdir failed");
+                    free(absolute_path); // Clean up
+                    return -1; // Error creating directory
+                }
+                printf("Directory '%s' created successfully.\n", absolute_path);
+            }
+
+            *p = '/'; // Restore the '/' character
+        }
+    }
+
+    // Create the final target directory
+    if (stat(absolute_path, &st) != 0) {
+        if (mkdir(absolute_path, 0755) == -1) {
+            perror("mkdir failed");
+            free(absolute_path); // Clean up
+            return -1; // Error creating directory
+        }
+        printf("Directory '%s' created successfully.\n", absolute_path);
+    }
+
+    free(absolute_path); // Clean up
+    return 0; // Directory created successfully
+}
 
 // strdup wrapper
 char *xstrdup(char *s) {
@@ -318,6 +362,7 @@ void help_message() {
            "  -s            execute the command as a shell command\n"
            "  -a NAME PATH  add an alias for a path\n"
            "  -r NAME       remove an alias\n"
+           "  -p            create directories before executing command\n"
            "  -l            list all aliases\n\n"
            "Report bugs to <https://github.com/xfgusta/execdir/issues>\n");
     exit(EXIT_SUCCESS);
@@ -336,14 +381,18 @@ int main(int argc, char **argv) {
     int add_alias_opt = 0;
     int rm_alias_opt = 0;
     int ls_alias_opt = 0;
+    int mkdir_opt = 0;
 
-    while((opt = getopt(argc, argv, "hvsarl")) != -1) {
+    while((opt = getopt(argc, argv, "hvsarlp")) != -1) {
         switch(opt) {
             case 'h':
                 help_opt = 1;
                 break;
             case 'v':
                 version_opt = 1;
+                break;
+            case 'p':
+                mkdir_opt = 1;
                 break;
             case 's':
                 sh_exec_opt = 1;
@@ -433,14 +482,17 @@ int main(int argc, char **argv) {
     argc -= 1;
     argv += 1;
 
-    // try to get an alias if path doesn't exist
+    // try to get an alias or create new directory if path doesn't exist
     if(stat(path, &st) == -1 || !S_ISDIR(st.st_mode)) {
-        char *name = path;
-
-        path = list_get_path_by_name(list, name);
-        if(!path) {
-            print_error("path or alias for path \"%s\" not found\n", name);
-            exit(EXIT_FAILURE);
+        if (mkdir_opt == 1){
+            create_directory(path);
+        } else {
+            char *name = path;
+            path = list_get_path_by_name(list, name);
+            if(!path) {
+                print_error("path or alias for path \"%s\" not found\n", name);
+                exit(EXIT_FAILURE);
+            }
         }
     }
 
