@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200809L
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -9,13 +9,55 @@
 #include <sys/stat.h>
 
 #define USAGE "Usage: execdir [-h] [-v] [-s] [-a NAME PATH] [-r NAME] [-l] " \
-              "[ARGS...]"
+"[ARGS...]"
 
-#define VERSION "0.3.0"
+#define VERSION "0.4.0"
 
 #define EXECDIR_FILE ".execdir"
 
 #define print_error(...) fprintf(stderr, "execdir: " __VA_ARGS__);
+
+int create_directory(const char *path) {
+    char *absolute_path = realpath(path, NULL);
+    if (absolute_path == NULL) {
+        print_error("realpath failed");
+        return -1; // Error resolving the path
+    }
+
+    struct stat st;
+
+    // Iterate through each character in the absolute path
+    for (char *p = absolute_path + 1; *p; ++p) {
+        if (*p == '/') {
+            *p = '\0'; // Temporarily terminate the string
+
+            // Check if the directory exists
+            if (stat(absolute_path, &st) != 0) {
+                // Create the directory if it does not exist
+                if (mkdir(absolute_path, 0755) == -1) {
+                    print_error("mkdir failed");
+                    free(absolute_path); // Clean up
+                    return -1; // Error creating directory
+                }
+            }
+
+            *p = '/'; // Restore the '/' character
+        }
+    }
+
+    // Create the final target directory
+    if (stat(absolute_path, &st) != 0) {
+        if (mkdir(absolute_path, 0755) == -1) {
+            print_error("mkdir failed");
+            free(absolute_path); // Clean up
+            return -1; // Error creating directory
+        }
+    }
+
+    free(absolute_path); // Clean up
+    return 0; // Directory created successfully
+}
+
 
 // name:path record linked list
 struct list {
@@ -316,10 +358,12 @@ void help_message() {
            "  -h            display this help and exit\n"
            "  -v            output version information and exit\n"
            "  -s            execute the command as a shell command\n"
-           "  -a NAME PATH  add an alias for a path\n"
+           "  -n NAME PATH  add an alias for a path\n"
            "  -r NAME       remove an alias\n"
+           "  -a            use aliases (-aa for using only aliases)\n"
+           "  -p            create directory if absent\n"
            "  -l            list all aliases\n\n"
-           "Report bugs to <https://github.com/xfgusta/execdir/issues>\n");
+           "Report bugs to <https://github.com/qr243vbi/execdir/issues>\n");
     exit(EXIT_SUCCESS);
 }
 
@@ -336,8 +380,10 @@ int main(int argc, char **argv) {
     int add_alias_opt = 0;
     int rm_alias_opt = 0;
     int ls_alias_opt = 0;
+    int use_alias_opt = 0;
+    int mkdir_opt = 0;
 
-    while((opt = getopt(argc, argv, "hvsarl")) != -1) {
+    while((opt = getopt(argc, argv, "hvsarlpn")) != -1) {
         switch(opt) {
             case 'h':
                 help_opt = 1;
@@ -349,6 +395,12 @@ int main(int argc, char **argv) {
                 sh_exec_opt = 1;
                 break;
             case 'a':
+                use_alias_opt += 1;
+                break;
+            case 'p':
+                mkdir_opt = 1;
+                break;
+            case 'n':
                 add_alias_opt = 1;
                 break;
             case 'r':
@@ -433,14 +485,32 @@ int main(int argc, char **argv) {
     argc -= 1;
     argv += 1;
 
+    if (use_alias_opt > 1){
+        goto alias_stat_exec_2;
+    }
     // try to get an alias if path doesn't exist
     if(stat(path, &st) == -1 || !S_ISDIR(st.st_mode)) {
+        if (use_alias_opt == 0) {
+            goto alias_stat_exec_0;
+        }
+        alias_stat_exec_2:
         char *name = path;
 
         path = list_get_path_by_name(list, name);
         if(!path) {
-            print_error("path or alias for path \"%s\" not found\n", name);
+            if (use_alias_opt == 1) {
+                print_error("path or ");
+            }
+            print_error("alias for path \"%s\" not found\n", name);
             exit(EXIT_FAILURE);
+        } else {
+            if(stat(path, &st) == -1 || !S_ISDIR(st.st_mode)) {
+                alias_stat_exec_0:
+                if ((mkdir_opt == 1) && create_directory(path)) {
+                    print_error("path \"%s\" not found\n", path);
+                    exit(EXIT_FAILURE);
+                }
+            }
         }
     }
 
