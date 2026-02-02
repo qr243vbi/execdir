@@ -2,8 +2,6 @@
 
 A tool that lets you run a command in a specific directory. It supports shell commands and path aliases. **execdir** will try to get an alias if the path doesn't exist.
 
-There is also a symlink called **x**, so you can type less using it.
-
 ## Examples
 
 Run a command in a specific directory:
