@@ -53,16 +53,12 @@ $ execdir -r nq
 
 ### From source
 
-The install directory defaults to `/usr/local`:
+Use cmake to build and install execdir
 
 ```text
-make install
-```
-
-You can install **execdir** in a different directory using the `PREFIX` variable:
-
-```text
-make PREFIX=/usr install
+cmake -S . -B build
+cmake --build build
+sudo cmake --install build
 ```
 
 ## License
