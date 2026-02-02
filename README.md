@@ -61,5 +61,5 @@ sudo cmake --install build
 
 ## License
 
-Copyright (c) 2022 Gustavo Costa. Distributed under the MIT license.
+Copyright (c) 2022 Gustavo Costa. Distributed under the MIT license.<br/>
 Copyright (c) 2026 qr243vbi. Distributed under the MIT license.
