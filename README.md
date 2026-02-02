@@ -1,6 +1,6 @@
 # execdir
 
-A tool that lets you run a command in a specific directory. It supports shell commands and path aliases. **execdir** will try to get an alias if the path doesn't exist.
+A tool that lets you run a command in a specific directory. It supports shell commands and path aliases. **execdir** will try to get an alias if the path doesn't exist (if -a flag is passed).
 
 ## Examples
 
