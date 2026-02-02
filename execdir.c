@@ -450,6 +450,7 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
         add_alias_to_db(execdir_file_path, argv[0], argv[1]);
+        if ((mkdir_opt == 1) && create_directory(argv[1])) {};
         goto do_not_skip_success;
     } else if(rm_alias_opt) {
         if(argc < 1) {
