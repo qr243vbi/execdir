@@ -489,6 +489,7 @@ int main(int argc, char **argv) {
 
     // save and skip the path argument
     path = *argv;
+    char * name;
     argc -= 1;
     argv += 1;
 
@@ -501,7 +502,7 @@ int main(int argc, char **argv) {
             goto alias_stat_exec_0;
         }
         alias_stat_exec_2:
-        char *name = path;
+        name = path;
 
         path = get_path_by_name(execdir_file_path, name);
         if(!path) {
