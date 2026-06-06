@@ -8,7 +8,28 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <lmdb.h>
+#include <stdint.h>
 
+#ifndef DEFAULT_EXECDIR_DB_MAXSIZE
+// default: 10mb
+#define DEFAULT_EXECDIR_DB_MAXSIZE 10 * 1024 * 1024 * 2
+#endif
+
+size_t execdir_db_maxsize() {
+    const char *val = getenv("EXECDIR_DB_MAXSIZE");
+    if (!val) {
+        return DEFAULT_EXECDIR_DB_MAXSIZE; 
+    }
+
+    char *end = NULL;
+    unsigned long long size = strtoull(val, &end, 10);
+
+    if (end == val || *end != '\0') {
+        return DEFAULT_EXECDIR_DB_MAXSIZE;
+    }
+
+    return ((size_t)1048576) * ((size_t)size);
+}
 
 #define USAGE "Usage: execdir [-h] [-v] [-s] [-a] [-a] [-p] [-n NAME PATH] [-r NAME] [-g NAME] [-l] " \
 "[ARGS...]"
@@ -237,7 +258,7 @@ LMDB_Database* open_or_create_lmdb_database(const char *path, int flags) {
     handle_error(rc);
 
     // Set the map size (10 MB in this example)
-    rc = mdb_env_set_mapsize(db->env, 10485760);
+    rc = mdb_env_set_mapsize(db->env,  execdir_db_maxsize());
     handle_error(rc);
 
     // Open the environment
