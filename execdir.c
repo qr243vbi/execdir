@@ -15,7 +15,7 @@
 #define DEFAULT_EXECDIR_DB_MAXSIZE 10 * 1024 * 1024 * 2
 #endif
 
-size_t execdir_db_maxsize() {
+size_t execdir_db_maxsize_new() {
     const char *val = getenv("EXECDIR_DB_MAXSIZE");
     if (!val) {
         return DEFAULT_EXECDIR_DB_MAXSIZE; 
@@ -29,6 +29,17 @@ size_t execdir_db_maxsize() {
     }
 
     return (size_t)size;
+}
+
+size_t execdir_db_maxsize(){
+    const size_t db_maxsize = 0;
+    if (db_maxsize == 0){
+        db_maxsize = execdir_db_maxsize_new();
+        if (db_maxsize < 1024){
+            db_maxsize = DEFAULT_EXECDIR_DB_MAXSIZE;
+        }
+    }
+    return db_maxsize;
 }
 
 #define USAGE "Usage: execdir [-h] [-v] [-s] [-a] [-a] [-p] [-n NAME PATH] [-r NAME] [-g NAME] [-l] " \
