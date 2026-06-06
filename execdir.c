@@ -122,22 +122,30 @@ char *get_home_dir() {
 
 // return execdir file path
 char *get_execdir_file_path() {
-    char *path;
-    char *home_dir;
+    const char *env_path = getenv("EXECDIR_DB_PATH");
 
-    home_dir = get_home_dir();
-    if(!home_dir) {
-        print_error("cannot get the home directory\n");
-        exit(EXIT_FAILURE);
+    const char *base_dir = NULL;
+    char *allocated_base = NULL;
+
+    if (env_path && env_path[0] != '\0') {
+        base_dir = env_path;
+    } else {
+        base_dir = get_home_dir();
+        if (!base_dir) {
+            print_error("cannot get home directory\n");
+            exit(EXIT_FAILURE);
+        }
     }
 
-    path = malloc(strlen(home_dir) + strlen("/" EXECDIR_FILE) + 1);
-    if(!path) {
+    size_t needed = strlen(base_dir) + 1 + strlen(EXECDIR_FILE) + 1;
+
+    char *path = malloc(needed);
+    if (!path) {
         print_error("cannot allocate memory: %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
-    sprintf(path, "%s/" EXECDIR_FILE, home_dir);
+    snprintf(path, needed, "%s/%s", base_dir, EXECDIR_FILE);
 
     return path;
 }
@@ -378,6 +386,22 @@ void drop_path_by_name(const char * execdir, const char * name){
     return;
 }
 
+void drop_entire_db(const char * execdir){
+    LMDB_Database * db = open_or_create_lmdb_database(execdir, 0);
+    int rc = mdb_txn_begin(env, NULL, 0, &txn);
+    handle_error(rc);
+
+    rc = mdb_drop(txn, dbi, 0);  // 0 = keep DB, just clear contents
+    if (rc) {
+        mdb_txn_abort(txn);
+    } else {
+        rc = mdb_txn_commit(txn);
+    }
+    close_lmdb_database(db);
+    handle_error(rc);
+    return;
+}
+
 void add_alias_to_db(const char * execdir, const char * name, const char * value){
     LMDB_Database * db = open_or_create_lmdb_database(execdir, 0);
     put_string_value(db, name, value);
@@ -427,14 +451,19 @@ int main(int argc, char **argv) {
     int ls_alias_opt = 0;
     int use_alias_opt = 0;
     int mkdir_opt = 0;
+    int drop_opt = 0;
+    
 
-    while((opt = getopt(argc, argv, "hvsarlpng")) != -1) {
+    while((opt = getopt(argc, argv, "hvsarlpngc")) != -1) {
         switch(opt) {
             case 'g':
                 get_alias_opt = 1;
                 break;
             case 'h':
                 help_opt = 1;
+                break;
+            case 'c':
+                drop_opt = 1;
                 break;
             case 'v':
                 version_opt = 1;
@@ -505,6 +534,9 @@ int main(int argc, char **argv) {
     } else if (ls_alias_opt) {
         list_keys_and_values(execdir_file_path);
         goto do_not_skip_success;
+    } else if (drop_opt) {
+        drop_entire_db(execdir_file_path);
+        return 0;
     }
 
     goto skip_success;
