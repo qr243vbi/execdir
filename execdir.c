@@ -241,6 +241,7 @@ void help_message() {
            "  -v            output version information and exit\n"
            "  -s            execute the command as a shell command\n"
            "  -n NAME PATH  add an alias for a path\n"
+           "  -c            clear database\n"
            "  -r NAME       remove an alias\n"
            "  -a            use aliases (-aa for using only aliases)\n"
            "  -g NAME       get alias variable\n"
@@ -386,20 +387,11 @@ void drop_path_by_name(const char * execdir, const char * name){
     return;
 }
 
-void drop_entire_db(const char * execdir){
-    LMDB_Database * db = open_or_create_lmdb_database(execdir, 0);
-    int rc = mdb_txn_begin(env, NULL, 0, &txn);
+void drop_entire_db(const char *execdir) {
+    LMDB_Database *db = open_or_create_lmdb_database(execdir, 0);
+    int rc = mdb_drop(db->txn, db->dbi, 0);
     handle_error(rc);
-
-    rc = mdb_drop(txn, dbi, 0);  // 0 = keep DB, just clear contents
-    if (rc) {
-        mdb_txn_abort(txn);
-    } else {
-        rc = mdb_txn_commit(txn);
-    }
     close_lmdb_database(db);
-    handle_error(rc);
-    return;
 }
 
 void add_alias_to_db(const char * execdir, const char * name, const char * value){
