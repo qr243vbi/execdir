@@ -32,7 +32,7 @@ size_t execdir_db_maxsize_new() {
 }
 
 size_t execdir_db_maxsize(){
-    const size_t db_maxsize = 0;
+    static size_t db_maxsize = 0;
     if (db_maxsize == 0){
         db_maxsize = execdir_db_maxsize_new();
         if (db_maxsize < 1024){
