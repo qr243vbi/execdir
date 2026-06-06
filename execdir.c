@@ -18,14 +18,14 @@
 size_t execdir_db_maxsize_new() {
     const char *val = getenv("EXECDIR_DB_MAXSIZE");
     if (!val) {
-        return DEFAULT_EXECDIR_DB_MAXSIZE; 
+        return 0; 
     }
 
     char *end = NULL;
     unsigned long long size = strtoull(val, &end, 10);
 
     if (end == val || *end != '\0') {
-        return DEFAULT_EXECDIR_DB_MAXSIZE;
+        return 0;
     }
 
     return (size_t)size;
