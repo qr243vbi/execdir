@@ -34,8 +34,8 @@ size_t execdir_db_maxsize_new() {
 size_t execdir_db_maxsize(){
     static size_t db_maxsize = 0;
     if (db_maxsize == 0){
-        db_maxsize = execdir_db_maxsize_new();
-        if (db_maxsize < 1024){
+        db_maxsize = execdir_db_maxsize_new() * 1024;
+        if (db_maxsize < 1024 * 10){
             db_maxsize = DEFAULT_EXECDIR_DB_MAXSIZE;
         }
     }
