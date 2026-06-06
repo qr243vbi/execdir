@@ -28,7 +28,7 @@ size_t execdir_db_maxsize() {
         return DEFAULT_EXECDIR_DB_MAXSIZE;
     }
 
-    return ((size_t)1048576) * ((size_t)size);
+    return (size_t)size;
 }
 
 #define USAGE "Usage: execdir [-h] [-v] [-s] [-a] [-a] [-p] [-n NAME PATH] [-r NAME] [-g NAME] [-l] " \
